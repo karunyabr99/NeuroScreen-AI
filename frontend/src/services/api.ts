@@ -19,7 +19,7 @@ import {
   ScenarioDefinition
 } from '../types';
 
-const API_BASE = '/api/v1';
+const API_BASE = `${(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')}/api/v1`;
 const TOKEN_KEY = 'neuroscreen_auth_token';
 
 export const DEFAULT_PERSONAS = {
