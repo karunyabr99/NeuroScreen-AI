@@ -5,7 +5,6 @@ from ml_engine.models.toddler_questionnaire_model import ToddlerQuestionnaireMod
 from ml_engine.models.random_forest_model import RandomForestScreeningModel
 from ml_engine.models.xgboost_model import XGBoostScreeningModel
 from ml_engine.models.catboost_model import CatBoostScreeningModel
-from ml_engine.models.pytorch_fusion_net import PyTorchFusionScreeningModel
 from ml_engine.config import TOTAL_FEATURE_DIM
 
 class ModelRegistry:
@@ -25,7 +24,11 @@ class ModelRegistry:
             cls._models["random_forest"] = RandomForestScreeningModel()
             cls._models["xgboost"] = XGBoostScreeningModel()
             cls._models["catboost"] = CatBoostScreeningModel()
-            cls._models["pytorch_fusion"] = PyTorchFusionScreeningModel()
+            try:
+                from ml_engine.models.pytorch_fusion_net import PyTorchFusionScreeningModel
+                cls._models["pytorch_fusion"] = PyTorchFusionScreeningModel()
+            except ImportError:
+                pass
 
     @classmethod
     def get_model(cls, name: str = "stacking_ensemble") -> BaseMultimodalModel:
