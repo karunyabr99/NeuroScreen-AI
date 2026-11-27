@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+
+# Frontend
+node_modules/
+dist/
+build/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and private data
+*.db
+*.sqlite
+*.sqlite3
+storage/
+
+# Mac
+.DS_Store
+
+# Logs
+*.log
+
+# Backup files
+*.backup
+*.bak
+*.old
+*.tmp
+
+# Training logs
+catboost_info/
+backend/catboost_info/
+
+# Editor settings
+.vscode/
+
+# Local temporary files
+*.log
+.DS_Store
+
+# Research datasets and local model assets
+ml_engine/datasets/*
+!ml_engine/datasets/.gitkeep
+ml_engine/vision/models/
+ml_engine/weights/*
+!ml_engine/weights/.gitkeep
