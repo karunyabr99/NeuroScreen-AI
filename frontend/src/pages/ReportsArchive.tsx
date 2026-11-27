@@ -13,7 +13,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { api } from '../services/api';
 import { ScreeningSession, Patient } from '../types';
-import { formatDateTime } from '../lib/utils';
+import { formatDateTime, downloadBlobAsFile } from '../lib/utils';
 
 interface ReportsArchiveProps {
   onSelectSession: (sessionId: string) => void;
@@ -58,12 +58,8 @@ export const ReportsArchive: React.FC<ReportsArchiveProps> = ({
     setDownloadingId(sessionId);
     try {
       const blob = await api.downloadReportPdf(sessionId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `screening_report_${anonId}_${sessionId.slice(0, 8)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `screening_report_${anonId}_${sessionId.slice(0, 8)}.pdf`;
+      downloadBlobAsFile(blob, filename);
     } catch (err: any) {
       alert(`PDF download failed: ${err.message}`);
     } finally {

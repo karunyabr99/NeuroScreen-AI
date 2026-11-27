@@ -45,16 +45,22 @@ class PdfReportService:
             ax.plot([0.5, 8.0], [9.38, 9.38], color="#cbd5e1", linewidth=0.8)
 
             anonymized_id = patient_data.get("anonymized_id", "NS-UNKNOWN")
-            age_months = patient_data.get("age_months", "N/A")
-            bio_sex = patient_data.get("biological_sex", "N/A").capitalize()
-            referral = patient_data.get("referral_source", "Clinical Partner")
-            ethics_ref = patient_data.get("ethics_approval_ref", "IRB-NS-2026-ETHICS-04")
-            consent_status = patient_data.get("consent_status", "granted").upper()
-            created_at = session_data.get("created_at", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"))
+            age_months = patient_data.get("age_months", 24)
+            try:
+                age_val = int(float(age_months))
+                age_str = f"{age_val} months ({age_val // 12}y {age_val % 12}m)"
+            except (ValueError, TypeError):
+                age_str = f"{age_months} months" if age_months else "N/A"
+
+            bio_sex = str(patient_data.get("biological_sex") or "Unknown").capitalize()
+            referral = patient_data.get("referral_source") or "Clinical Partner"
+            ethics_ref = patient_data.get("ethics_approval_ref") or "IRB-NS-2026-ETHICS-04"
+            consent_status = str(patient_data.get("consent_status") or "granted").upper()
+            created_at = session_data.get("created_at") or datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
             meta_text_left = (
                 f"• Participant Identifier: {anonymized_id}\n"
-                f"• Age in Months: {age_months} months ({int(age_months)//12}y {int(age_months)%12}m)\n"
+                f"• Age in Months: {age_str}\n"
                 f"• Biological Sex: {bio_sex}\n"
                 f"• Referral Origin: {referral}"
             )

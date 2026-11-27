@@ -51,3 +51,18 @@ export function formatRiskTier(tier: string): { label: string; color: string; bg
   }
 }
 
+export function downloadBlobAsFile(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.style.display = "none";
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    if (a.parentNode) {
+      a.parentNode.removeChild(a);
+    }
+    window.URL.revokeObjectURL(url);
+  }, 1500);
+}

@@ -22,6 +22,7 @@ import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/Alert';
 import { api } from '../services/api';
 import { Patient, ScreeningSession } from '../types';
+import { downloadBlobAsFile } from '../lib/utils';
 
 interface SimpleAssessmentProps {
   initialPatientId?: string;
@@ -323,12 +324,8 @@ export const SimpleAssessment: React.FC<SimpleAssessmentProps> = ({
     setIsDownloadingPdf(true);
     try {
       const blob = await api.downloadReportPdf(completedSession.id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `screening_summary_${anonId}_${completedSession.id.slice(0, 8)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `screening_summary_${anonId}_${completedSession.id.slice(0, 8)}.pdf`;
+      downloadBlobAsFile(blob, filename);
     } catch (err: any) {
       alert(`PDF download failed: ${err.message}`);
     } finally {

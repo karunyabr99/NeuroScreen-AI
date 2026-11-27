@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_current_user, require_roles
+from app.api.deps import get_db, get_current_user, get_current_user_optional, require_roles
 from app.models.user import User
 from app.models.screening import ScreeningSession
 from app.models.patient import Patient
@@ -119,12 +119,15 @@ def download_research_report_pdf(
     """
     Generates a publication-grade vector PDF titled 'De-identified Research Screening Summary'.
     Includes protocol references, modality quality, non-diagnostic disclaimers, and research limitations.
+    Accessible to all users with a valid session ID.
     """
     session = db.query(ScreeningSession).filter(ScreeningSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Screening session record not found.")
 
     patient = session.patient
+    if not patient:
+        raise HTTPException(status_code=404, detail="Participant record not found.")
     session_dict = {
         "id": session.id,
         "created_at": session.created_at,
@@ -145,11 +148,15 @@ def download_research_report_pdf(
     }
 
     pdf_bytes = PdfReportService.generate_research_summary_pdf(session_dict, patient_dict)
-    filename = f"research_summary_{patient.anonymized_id}_{session.id[:8]}.pdf"
+    anon_tag = patient.anonymized_id
+    filename = f"research_summary_{anon_tag}_{session.id[:8]}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
 
 # ----------------- ML Training Preparation & Benchmarking -----------------

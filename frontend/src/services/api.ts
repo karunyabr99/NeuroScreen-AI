@@ -337,11 +337,21 @@ export const api = {
 
   async downloadReportPdf(sessionId: string): Promise<Blob> {
     const authH = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/research/reports/${sessionId}/pdf`, {
+    let res = await fetch(`${API_BASE}/screenings/${sessionId}/pdf`, {
       headers: { ...authH },
     });
+    if (!res.ok && (res.status === 404 || res.status === 401)) {
+      res = await fetch(`${API_BASE}/research/reports/${sessionId}/pdf`, {
+        headers: { ...authH },
+      });
+    }
     if (!res.ok) {
-      throw new Error(`PDF generation failed: ${res.statusText}`);
+      let message = `PDF generation failed (${res.status}): ${res.statusText}`;
+      try {
+        const parsed = await res.json();
+        if (parsed.detail) message = parsed.detail;
+      } catch {}
+      throw new Error(message);
     }
     return res.blob();
   },
