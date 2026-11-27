@@ -48,6 +48,24 @@ def get_current_user(
 
     return user
 
+def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """
+    Returns authenticated user if a valid token is provided, otherwise None.
+    Does not raise 401 when unauthenticated.
+    """
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+        if not payload or "sub" not in payload:
+            return None
+        return AuthService.get_by_email(db, payload["sub"])
+    except Exception:
+        return None
+
 def require_roles(allowed_roles: List[str]):
     """
     Role-Based Access Control (RBAC) dependency factory.

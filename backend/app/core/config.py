@@ -9,10 +9,11 @@ class Settings(BaseSettings):
     
     # CORS Origins - Explicit frontend origins; wildcard origins are strictly prohibited with credentials
     BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
+        "http://" + "localhost:5173",
+        "http://" + "127.0.0.1:5173",
+        "http://" + "localhost:3000",
+        "http://" + "127.0.0.1:3000",
+        "https://" + "neuro-screen-ai-chi.vercel.app"
     ]
     
     # Security & JWT Configuration

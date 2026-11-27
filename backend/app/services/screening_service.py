@@ -44,24 +44,16 @@ class ScreeningService:
         # 3. Model routing and age gating
         # Prepare toddler dictionary for Toddler Q-CHAT model
         toddler_dict = None
-        if beh_dict:
+        qchat_keys = [f"a{i}" for i in range(1, 11)]
+        if beh_dict and all(beh_dict.get(key) is not None for key in qchat_keys):
             toddler_dict = {
-                'A1': beh_dict.get('a1') if beh_dict.get('a1') is not None else beh_dict.get('name_call_orientation', 0),
-                'A2': beh_dict.get('a2') if beh_dict.get('a2') is not None else beh_dict.get('gaze_alternation_dyadic', 0),
-                'A3': beh_dict.get('a3') if beh_dict.get('a3') is not None else beh_dict.get('pointing_proto_declarative', 0),
-                'A4': beh_dict.get('a4') if beh_dict.get('a4') is not None else beh_dict.get('pointing_proto_declarative', 0),
-                'A5': beh_dict.get('a5') if beh_dict.get('a5') is not None else beh_dict.get('pretend_play_engagement', 0),
-                'A6': beh_dict.get('a6') if beh_dict.get('a6') is not None else beh_dict.get('gaze_alternation_dyadic', 0),
-                'A7': beh_dict.get('a7') if beh_dict.get('a7') is not None else beh_dict.get('social_smile_reciprocity', 0),
-                'A8': beh_dict.get('a8') if beh_dict.get('a8') is not None else beh_dict.get('sensory_hypersensitivity', 0),
-                'A9': beh_dict.get('a9') if beh_dict.get('a9') is not None else beh_dict.get('gestural_communication', 0),
-                'A10': beh_dict.get('a10') if beh_dict.get('a10') is not None else beh_dict.get('repetitive_motor_mannerisms', 0),
+                **{f"A{i}": beh_dict[f"a{i}"] for i in range(1, 11)},
                 'Age_Mons': patient.age_months,
                 'Sex': 'm' if 'm' in (patient.biological_sex or 'm').lower() else 'f',
-                'Ethnicity': beh_dict.get('ethnicity', 'Others'),
-                'Jaundice': beh_dict.get('jaundice', 'no'),
-                'Family_mem_with_ASD': beh_dict.get('family_mem_with_asd', 'no'),
-                'Who completed the test': beh_dict.get('who_completed_test', 'family member')
+                'Ethnicity': beh_dict.get('ethnicity') or 'Others',
+                'Jaundice': beh_dict.get('jaundice') or 'no',
+                'Family_mem_with_ASD': beh_dict.get('family_mem_with_asd') or 'no',
+                'Who completed the test': beh_dict.get('who_completed_test') or 'family member'
             }
 
         import math
@@ -174,6 +166,13 @@ class ScreeningService:
         lime_exp["session_id"] = session.id
         lime_exp["created_at"] = lime_rec.created_at
         lime_exp["is_calibrated"] = pred.is_calibrated
+        for explanation in (shap_exp, lime_exp):
+            if pred.risk_tier == "OBSERVATION_ONLY_UNDER_12M":
+                explanation["status"] = "OBSERVATION_ONLY_UNDER_12M"
+            else:
+                explanation["status"] = "EXPLAINABILITY_SUSPENDED_MODEL_UNCALIBRATED"
+            if pred.risk_tier == "QUESTIONNAIRE_INCOMPLETE":
+                explanation["calibration_status_notice"] = "All ten explicit Q-CHAT answers are required. No questionnaire score was generated."
 
         return {
             "session": session,
@@ -212,7 +211,12 @@ class ScreeningService:
                 status_notice = "Verified Calibrated Inference"
             else:
                 exp_status = "EXPLAINABILITY_SUSPENDED_MODEL_UNCALIBRATED"
-                status_notice = "Uncalibrated Modular Interface: Checkpoint unmounted."
+                if session.risk_tier == "QUESTIONNAIRE_INCOMPLETE":
+                    status_notice = "Explainability suspended: all ten explicit Q-CHAT answers are required. No questionnaire score was generated."
+                elif session.risk_tier == "OUTSIDE_VALIDATED_AGE_RANGE":
+                    status_notice = "Explainability suspended: child is outside the validated questionnaire age range."
+                else:
+                    status_notice = "Uncalibrated Modular Interface: Checkpoint unmounted."
 
             formatted_explanations.append({
                 "id": exp.id,

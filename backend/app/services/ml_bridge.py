@@ -86,6 +86,71 @@ class MLBridge:
                 "lime_explanation": obs_lime
             }
 
+        # Q-CHAT models require explicit questionnaire answers and validated age.
+        if model_name in ["toddler_qchat", "catboost", "random_forest", "lasso_logistic"]:
+            from ml_engine.interfaces.base_model import ModelPredictionResult
+
+            missing_age = patient_age_months is None
+            age_out_of_range = (
+                not missing_age and
+                float(patient_age_months) > 36
+            )
+            required_answers = [f"A{i}" for i in range(1, 11)]
+            missing_answers = (
+                toddler_dict is None or
+                any(toddler_dict.get(key) is None for key in required_answers)
+            )
+
+            if missing_age or age_out_of_range or missing_answers:
+                if missing_age:
+                    tier = "AGE_REQUIRED"
+                    message = "Child age is required. No questionnaire score was generated."
+                elif age_out_of_range:
+                    tier = "OUTSIDE_VALIDATED_AGE_RANGE"
+                    message = "This toddler questionnaire model is restricted to ages 12–36 months. No score was generated."
+                else:
+                    tier = "QUESTIONNAIRE_INCOMPLETE"
+                    message = "All ten explicit Q-CHAT answers are required. Behavioural, visual and acoustic observations cannot replace questionnaire answers. No score was generated."
+
+                prediction = ModelPredictionResult(
+                    predicted_probability=None,
+                    is_calibrated=False,
+                    risk_tier=tier,
+                    confidence_interval={"lower": 0.0, "upper": 0.0},
+                    status_message=message,
+                    metadata={"age_months": patient_age_months}
+                )
+                explanation = {
+                    "method": "SHAP",
+                    "base_value": 0.5,
+                    "prediction_value": None,
+                    "status": tier,
+                    "feature_importances": [],
+                    "summary_narrative": message
+                }
+                lime = {
+                    "method": "LIME",
+                    "base_value": 0.5,
+                    "prediction_value": None,
+                    "status": tier,
+                    "feature_importances": [],
+                    "summary_narrative": message
+                }
+                return {
+                    "prediction": prediction,
+                    "model_status": {
+                        "key": model_name,
+                        "name": model_name,
+                        "family": "Research Machine Learning",
+                        "checkpoint_found": False,
+                        "is_trained": False,
+                        "is_calibrated": False,
+                        "status": tier
+                    },
+                    "shap_explanation": explanation,
+                    "lime_explanation": lime
+                }
+
         # Dedicated Toddler Model Handling
         if model_name in ["toddler_qchat", "catboost", "random_forest", "lasso_logistic"]:
             if model_name in ["catboost", "random_forest", "lasso_logistic"]:
@@ -132,12 +197,8 @@ class MLBridge:
 
             model = ModelRegistry.get_model("toddler_qchat")
             model_status = ModelRegistry.get_model_status("toddler_qchat")
-            if toddler_dict:
-                prediction_result = model.predict_toddler(toddler_dict)
-                shap_explanation = model.explain_instance(toddler_dict)
-            else:
-                prediction_result = model.predict_risk(feature_vector)
-                shap_explanation = model.explain_instance({})
+            prediction_result = model.predict_toddler(toddler_dict)
+            shap_explanation = model.explain_instance(toddler_dict)
 
             lime_explanation = {
                 "method": "LIME",

@@ -101,7 +101,24 @@ class ResearchPredictionService:
         Execute screening prediction with age gating, Youden thresholding,
         and genuine explainability.
         """
-        age_months = float(assessment_data.get("Age_Mons", assessment_data.get("age_months", 24)))
+        age_raw = assessment_data.get("Age_Mons", assessment_data.get("age_months"))
+        if age_raw is None:
+            age_months = None
+        else:
+            try:
+                age_months = float(age_raw)
+            except (TypeError, ValueError):
+                age_months = None
+        if age_months is None or not 0 <= age_months <= 120:
+            return {
+                "screening_status": "AGE_REQUIRED_OR_INVALID",
+                "predicted_probability": None,
+                "is_calibrated": False,
+                "risk_tier": "AGE_REQUIRED_OR_INVALID",
+                "status_message": "A valid child age in months is required. No prediction was generated.",
+                "model_used": model_name,
+                "explanation": {"method": "SHAP", "status": "EXPLAINABILITY_SUSPENDED_MODEL_UNCALIBRATED", "feature_importances": [], "summary_narrative": "No prediction was generated."}
+            }
 
         # Age Gate: Under 12 months (Strict Clinical Safety Rule)
         if age_months < 12:
@@ -129,6 +146,30 @@ class ResearchPredictionService:
                     "age_months": age_months,
                     "policy": "OBSERVATION_ONLY_UNDER_12M"
                 }
+            }
+
+        if age_months > 36:
+            return {
+                "screening_status": "OUTSIDE_VALIDATED_AGE_RANGE",
+                "predicted_probability": None,
+                "is_calibrated": False,
+                "risk_tier": "OUTSIDE_VALIDATED_AGE_RANGE",
+                "status_message": "This questionnaire model is restricted to ages 12–36 months. No prediction was generated.",
+                "model_used": model_name,
+                "explanation": {"method": "SHAP", "status": "EXPLAINABILITY_SUSPENDED_MODEL_UNCALIBRATED", "feature_importances": [], "summary_narrative": "Outside validated age range."}
+            }
+        required_answers = [f"A{i}" for i in range(1, 11)]
+        missing_answers = [key for key in required_answers if assessment_data.get(key, assessment_data.get(key.lower())) is None]
+        invalid_answers = [key for key in required_answers if assessment_data.get(key, assessment_data.get(key.lower())) is not None and assessment_data.get(key, assessment_data.get(key.lower())) not in (0, 1)]
+        if missing_answers or invalid_answers:
+            return {
+                "screening_status": "QUESTIONNAIRE_INCOMPLETE",
+                "predicted_probability": None,
+                "is_calibrated": False,
+                "risk_tier": "QUESTIONNAIRE_INCOMPLETE",
+                "status_message": "All ten explicit Q-CHAT answers (A1–A10, each 0 or 1) are required. No prediction was generated.",
+                "model_used": model_name,
+                "explanation": {"method": "SHAP", "status": "EXPLAINABILITY_SUSPENDED_MODEL_UNCALIBRATED", "feature_importances": [], "summary_narrative": "Questionnaire incomplete; no prediction was generated."}
             }
 
         # Check model readiness

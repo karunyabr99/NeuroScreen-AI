@@ -92,7 +92,26 @@ class ToddlerQuestionnaireModel(BaseMultimodalModel):
           - 12 to 36 months: Executes calibrated toddler stacking classifier
           - Over 36 months: Returns notice directing to child screening
         """
-        age_months = float(toddler_dict.get('Age_Mons', toddler_dict.get('age_months', 24)))
+        raw_age = toddler_dict.get('Age_Mons', toddler_dict.get('age_months'))
+        if raw_age is None:
+            return ModelPredictionResult(
+                predicted_probability=None,
+                is_calibrated=False,
+                risk_tier="AGE_REQUIRED",
+                status_message="Child age is required. No score was generated."
+            )
+        try:
+            age_months = float(raw_age)
+        except (TypeError, ValueError):
+            age_months = float("nan")
+
+        if not np.isfinite(age_months) or age_months < 0:
+            return ModelPredictionResult(
+                predicted_probability=None,
+                is_calibrated=False,
+                risk_tier="INVALID_AGE",
+                status_message="A valid child age in months is required."
+            )
 
         # Age Gate: Under 12 months
         if age_months < 12:
@@ -105,6 +124,36 @@ class ToddlerQuestionnaireModel(BaseMultimodalModel):
                 metadata={"age_months": age_months, "policy": "OBSERVATION_ONLY_UNDER_12M"}
             )
 
+        if age_months > 36:
+            return ModelPredictionResult(
+                predicted_probability=None,
+                is_calibrated=False,
+                risk_tier="OUTSIDE_VALIDATED_AGE_RANGE",
+                status_message="This toddler questionnaire model is restricted to ages 12–36 months. No score was generated.",
+                metadata={"age_months": age_months}
+            )
+
+        required = [f"A{i}" for i in range(1, 11)]
+        missing = [key for key in required if toddler_dict.get(key, toddler_dict.get(key.lower())) is None]
+        if missing:
+            return ModelPredictionResult(
+                predicted_probability=None,
+                is_calibrated=False,
+                risk_tier="QUESTIONNAIRE_INCOMPLETE",
+                status_message="All ten explicit Q-CHAT answers are required. Missing: " + ", ".join(missing),
+                metadata={"age_months": age_months, "missing_answers": missing}
+            )
+
+        for key in required:
+            value = toddler_dict.get(key, toddler_dict.get(key.lower()))
+            if value not in (0, 1):
+                return ModelPredictionResult(
+                    predicted_probability=None,
+                    is_calibrated=False,
+                    risk_tier="INVALID_QUESTIONNAIRE_ANSWER",
+                    status_message=f"{key} must be explicitly answered with 0 or 1."
+                )
+
         if not self._is_calibrated or self.estimator is None or self.preprocessor is None:
             return ModelPredictionResult(
                 predicted_probability=None,
@@ -115,16 +164,16 @@ class ToddlerQuestionnaireModel(BaseMultimodalModel):
 
         # Standardize DataFrame row
         row = {
-            'A1': int(toddler_dict.get('A1', toddler_dict.get('a1', 0))),
-            'A2': int(toddler_dict.get('A2', toddler_dict.get('a2', 0))),
-            'A3': int(toddler_dict.get('A3', toddler_dict.get('a3', 0))),
-            'A4': int(toddler_dict.get('A4', toddler_dict.get('a4', 0))),
-            'A5': int(toddler_dict.get('A5', toddler_dict.get('a5', 0))),
-            'A6': int(toddler_dict.get('A6', toddler_dict.get('a6', 0))),
-            'A7': int(toddler_dict.get('A7', toddler_dict.get('a7', 0))),
-            'A8': int(toddler_dict.get('A8', toddler_dict.get('a8', 0))),
-            'A9': int(toddler_dict.get('A9', toddler_dict.get('a9', 0))),
-            'A10': int(toddler_dict.get('A10', toddler_dict.get('a10', 0))),
+            'A1': int(toddler_dict.get('A1', toddler_dict.get('a1'))),
+            'A2': int(toddler_dict.get('A2', toddler_dict.get('a2'))),
+            'A3': int(toddler_dict.get('A3', toddler_dict.get('a3'))),
+            'A4': int(toddler_dict.get('A4', toddler_dict.get('a4'))),
+            'A5': int(toddler_dict.get('A5', toddler_dict.get('a5'))),
+            'A6': int(toddler_dict.get('A6', toddler_dict.get('a6'))),
+            'A7': int(toddler_dict.get('A7', toddler_dict.get('a7'))),
+            'A8': int(toddler_dict.get('A8', toddler_dict.get('a8'))),
+            'A9': int(toddler_dict.get('A9', toddler_dict.get('a9'))),
+            'A10': int(toddler_dict.get('A10', toddler_dict.get('a10'))),
             'Age_Mons': int(age_months),
             'Sex': str(toddler_dict.get('Sex', toddler_dict.get('sex', 'm'))).lower()[:1],
             'Ethnicity': str(toddler_dict.get('Ethnicity', toddler_dict.get('ethnicity', 'Others'))),
@@ -175,49 +224,15 @@ class ToddlerQuestionnaireModel(BaseMultimodalModel):
 
     def predict_risk(self, features: np.ndarray) -> ModelPredictionResult:
         """
-        Accepts either a 1D feature array (e.g. from multimodal bridge) or maps features to toddler input.
+        This questionnaire model cannot score a multimodal feature vector.
+        Explicit Q-CHAT answers must be supplied through predict_toddler().
         """
-        if not self._is_calibrated:
-            return ModelPredictionResult(
-                predicted_probability=float('nan'),
-                is_calibrated=False,
-                risk_tier="UNCALIBRATED",
-                status_message="Toddler model unmounted."
-            )
-
-        # If features length matches preprocessed shape directly (33 features)
-        if len(features) == 33:
-            prob = float(self.estimator.predict_proba(features.reshape(1, -1))[0, 1])
-            tier = "HIGH" if prob >= 0.65 else "ELEVATED" if prob >= 0.30 else "LOW"
-            return ModelPredictionResult(
-                predicted_probability=round(prob, 4),
-                is_calibrated=True,
-                risk_tier=tier,
-                confidence_interval={"lower": max(0.0, prob - 0.05), "upper": min(1.0, prob + 0.05)},
-                status_message="Direct feature vector evaluated on calibrated toddler stacking ensemble"
-            )
-
-        # Fallback mapping from multimodal 24-feature vector
-        # Features 0..9 correspond to behavioral questionnaire items
-        row = {
-            'A1': int(features[1] > 0.5) if len(features) > 1 else 0, # name call
-            'A2': int(features[6] > 0.5) if len(features) > 6 else 0, # gaze alternation / eye contact
-            'A3': int(features[2] > 0.5) if len(features) > 2 else 0, # pointing wants
-            'A4': int(features[2] > 0.5) if len(features) > 2 else 0, # pointing share
-            'A5': int(features[3] > 0.5) if len(features) > 3 else 0, # pretend play
-            'A6': int(features[6] > 0.5) if len(features) > 6 else 0, # gaze follow
-            'A7': int(features[0] > 0.5) if len(features) > 0 else 0, # social reciprocity
-            'A8': int(features[7] > 0.5) if len(features) > 7 else 0, # sensory / speech
-            'A9': int(features[9] > 0.5) if len(features) > 9 else 0, # gestures
-            'A10': int(features[4] > 0.5) if len(features) > 4 else 0, # repetitive mannerisms
-            'Age_Mons': 24,
-            'Sex': 'm',
-            'Ethnicity': 'White European',
-            'Jaundice': 'no',
-            'Family_mem_with_ASD': 'no',
-            'Who completed the test': 'family member'
-        }
-        return self.predict_toddler(row)
+        return ModelPredictionResult(
+            predicted_probability=None,
+            is_calibrated=False,
+            risk_tier="QUESTIONNAIRE_REQUIRED",
+            status_message="A multimodal feature vector cannot substitute for the ten explicit Q-CHAT answers. No score was generated."
+        )
 
     def explain_instance(self, toddler_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
